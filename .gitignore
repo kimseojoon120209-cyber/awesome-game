@@ -1,0 +1,10 @@
+work/
+.sites-runtime/
+site-package.tar.gz
+node_modules/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*

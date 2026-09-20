@@ -1,0 +1,1 @@
+CREATE INDEX `idx_runs_level_ended` ON `runs` (`level`,`ended`);
