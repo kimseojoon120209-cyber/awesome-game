@@ -32,8 +32,8 @@ function cookieValue(req, name) {
 }
 
 async function supabase(path, { method = 'GET', body, prefer } = {}) {
-  const base = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
   if (!base || !key) throw new Error('Supabase is not configured');
   const response = await fetch(`${base}/rest/v1/${path}`, {
     method,
