@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 const base='dist/';
+// Include the browser module in Vercel's static output.
+fs.copyFileSync('shared/catalog.js',base+'catalog.js');
 fs.mkdirSync('dist/server',{recursive:true});
 fs.mkdirSync('dist/.openai',{recursive:true});
 fs.copyFileSync('.openai/hosting.json','dist/.openai/hosting.json');
@@ -11,3 +13,4 @@ const shared=fs.readFileSync('shared/catalog.js','utf8').replaceAll('export cons
 const server=fs.readFileSync('server.js','utf8').replace(/^import .*;\n/,'').replace('export async function api','async function api');
 fs.writeFileSync('dist/server/index.js',shared+'\n'+server+'\nconst assets='+JSON.stringify(assets)+`;\nexport default {async fetch(request,env){const path=new URL(request.url).pathname;if(path.startsWith('/api/'))return api(request,env);const a=assets[path==='/'||path==='/admin' ? '/index.html':path];if(!a)return new Response('Not found',{status:404});return new Response(Uint8Array.from(atob(a.data),c=>c.charCodeAt(0)),{headers:{'content-type':a.type,'cache-control':'no-cache','x-content-type-options':'nosniff'}})}};`);
 console.log('Built Worker with game assets and D1 migrations.');
+
