@@ -34,6 +34,7 @@ html:fullscreen{background:#080e26;overflow:auto}
  .slot-row{align-items:flex-start;gap:6px}#slots{flex:1;gap:5px;flex-wrap:wrap}.slot{min-width:42px;min-height:44px;height:auto;padding:8px;font-size:15px}
  #reset{min-height:44px;font-size:13px;padding:8px}#word-bank{gap:6px;margin-top:8px}.word{min-height:44px;padding:9px 13px;font-size:15px}
  .word.remember{min-height:32px;padding:5px 10px;font-size:14px;opacity:1}
+ .word.remember:not(:disabled){min-height:44px;padding:9px 12px;background:linear-gradient(#53d4f2,#187db7);color:#061d37;box-shadow:0 3px 0 #0d4d78;font-weight:800}
  #instructions{font-size:12px;line-height:1.4;margin-top:8px}#feedback{font-size:13px;line-height:1.4}
  .playfield canvas{order:1;display:block;align-self:center;width:100%;height:auto;aspect-ratio:16/9;flex:none}
  .touch{position:relative;order:2;inset:auto;padding:10px;gap:12px;background:#101e37;border-top:1px solid #425d81}
