@@ -96,7 +96,14 @@ $('#retry-save').onclick=()=>pendingResult&&saveResult(pendingResult);
 function pause(){if(!game||game.over)return;game.paused=!game.paused;keys.clear();$('#pause').textContent=game.paused?'▶ Resume':'Ⅱ Pause';$('#countdown').hidden=game.paused;}
 $('#pause').onclick=pause;$('#reset').onclick=reset;$('#again').onclick=()=>{const l=game.level;$('#result').close();start(l)};
 document.addEventListener('keydown',e=>{if(activeView!=='game'||!game||game.over)return;if(['ArrowLeft','ArrowRight','Space'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.code==='Space'&&game.level===2&&!game.paused&&game.phase==='play'&&game.jump===0){game.vy=540;game.jump=1;}}if(e.code==='Escape'){e.preventDefault();pause()}});document.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();if(game&&!game.over&&!game.paused)pause()});
-$$('[data-key]').forEach(b=>{b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);keys.add(b.dataset.key)};b.onpointerup=b.onpointercancel=()=>keys.delete(b.dataset.key)});
+$$('[data-key]').forEach(b=>{
+ const pointers=new Set();
+ b.setAttribute('aria-label',b.dataset.key==='Space'?'Jump':b.dataset.key==='ArrowLeft'?'Move left':'Move right');
+ b.onpointerdown=e=>{e.preventDefault();if(!game||game.over||game.paused)return;b.setPointerCapture(e.pointerId);pointers.add(e.pointerId);keys.add(b.dataset.key);b.classList.add('held');if(b.dataset.key==='Space'&&game.level===2&&game.phase==='play'&&game.jump===0){game.vy=540;game.jump=1;}};
+ const release=e=>{pointers.delete(e.pointerId);if(!pointers.size){keys.delete(b.dataset.key);b.classList.remove('held')}};
+ b.onpointerup=b.onpointercancel=b.onlostpointercapture=release;
+ window.addEventListener('blur',()=>{pointers.clear();b.classList.remove('held')});
+});
 window.addEventListener('pagehide',()=>{if(game&&!game.over){const payload={id:game.id,status:'abandoned',duration:Math.round(game.elapsed),correct:game.correct};queueResult(payload);navigator.sendBeacon('/api/finish',new Blob([JSON.stringify(payload)],{type:'application/json'}))}});
 function renderChests(){$('#chests').innerHTML=crates.map(c=>`<article class="card"><h2>${c.name}</h2><button class="chest-art-button" data-preview="${c.tier}" aria-label="Preview ${c.name} rewards">${sprite({cell:14,hue:c.tier===1?140:c.tier===2?250:0,tier:c.tier,name:c.name})}</button><p>${c.copy}</p><p>${items.filter(i=>i.tier===c.tier).length} possible rewards · ${c.cost} coins</p><button data-preview="${c.tier}">View rewards</button></article>`).join('')}
 function previewChest(tier){const c=crates.find(c=>c.tier===tier);if(!c)return;const rewards=items.filter(i=>i.tier===tier),remaining=rewards.filter(i=>!profile?.owned.includes(i.id));$('#chest-preview-title').textContent=c.name+' rewards';$('#chest-preview-copy').textContent=`Each chest gives one item you do not own. ${remaining.length} remaining, each with an equal chance. Previewing costs no coins.`;$('#chest-rewards').innerHTML=rewards.map(i=>`<article class="reward-option ${profile?.owned.includes(i.id)?'owned':''}">${sprite(i)}<h3>${i.name}</h3><p>${i.cat} · ${profile?.owned.includes(i.id)?'Owned':remaining.length?(100/remaining.length).toFixed(1)+'% chance':'Owned'}</p></article>`).join('');const buy=$('#chest-buy');buy.dataset.chest=tier;buy.disabled=!profile||remaining.length===0||!profile.admin&&profile.coins<c.cost;buy.textContent=remaining.length===0?'Collection complete':`Open chest · ${profile?.admin?'∞':c.cost} coins`;$('#chest-preview').showModal();}
@@ -111,6 +118,54 @@ $('#name-form').onsubmit=async e=>{e.preventDefault();try{profile=await api('pro
 $('#admin-form').onsubmit=async e=>{e.preventDefault();try{await api('admin',{password:$('#admin-password').value});$('#admin-password').value='';profile=await api('profile');sync();toast('Admin unlocked for one hour.')}catch(e){toast(e.message)}};$('#admin-logout').onclick=async()=>{try{await api('admin',{logout:true});profile=await api('profile');sync()}catch(e){toast(e.message)}};
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.view)view(b.dataset.view);if(b.dataset.level)start(+b.dataset.level);if(b.dataset.word)selectWord(+b.dataset.word);if(b.dataset.slot)removeSlot(+b.dataset.slot);if(b.dataset.preview)previewChest(+b.dataset.preview);if(b.dataset.chest)openChest(+b.dataset.chest);if(b.dataset.equip)equip(b.dataset.equip);if(b.dataset.cat){currentCat=b.dataset.cat;renderInventory()}if(b.dataset.rank){rankLevel=+b.dataset.rank;rankPage=0;renderRanks()}});
 function webmcp(){const mc=document.modelContext;if(!mc?.registerTool)return;const controller=new AbortController();window.addEventListener('pagehide',()=>controller.abort(),{once:true});for(const tool of [{name:'start_arcade_level',description:'Start a level. Creates a real match record.',inputSchema:{type:'object',properties:{level:{type:'integer',minimum:1,maximum:4}},required:['level'],additionalProperties:false},annotations:{readOnlyHint:false},execute:async({level})=>{if(!Number.isInteger(level)||!levels[level])throw new Error('Level must be 1–4');if(!profile)throw new Error('Choose a name first');await start(level);return{level,status:game?.level===level?'started':'failed'}}},{name:'view_arcade_section',description:'Navigate to a section. Leaving a match saves it as abandoned.',inputSchema:{type:'object',properties:{section:{type:'string',enum:['home','shop','inventory','leaderboard','admin']}},required:['section'],additionalProperties:false},annotations:{readOnlyHint:false},execute:({section})=>{if(!['home','shop','inventory','leaderboard','admin'].includes(section))throw new Error('Unknown section');view(section);return{section}}}])try{Promise.resolve(mc.registerTool(tool,{signal:controller.signal})).catch(()=>{})}catch{}}
+// Keep the game usable with thumbs, browser bars, and devices without Fullscreen API.
+function setupMobileUI(){
+ const viewport=document.querySelector('meta[name="viewport"]');
+ viewport.content='width=device-width,initial-scale=1,viewport-fit=cover';
+ let focusMode=false;
+ const fullButtons=[];
+ const nativeFullscreen=()=>!!(document.fullscreenElement||document.webkitFullscreenElement);
+ const supportsFullscreen=()=>!!((document.documentElement.requestFullscreen&&document.fullscreenEnabled)||(document.documentElement.webkitRequestFullscreen&&document.webkitFullscreenEnabled));
+ function syncScreen(){
+  const full=nativeFullscreen();
+  document.body.classList.toggle('focus-game',focusMode||full);
+  for(const button of fullButtons){button.textContent=full?'Exit full screen':focusMode?'Exit focus':'Full screen';button.setAttribute('aria-pressed',String(full||focusMode));}
+  fitScene();
+ }
+ async function toggleScreen(){
+  try{
+   if(nativeFullscreen()){const exit=document.exitFullscreen||document.webkitExitFullscreen;await exit.call(document);focusMode=false;}
+   else if(focusMode){focusMode=false;}
+   else if(supportsFullscreen()){const enter=document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen;await enter.call(document.documentElement);}
+   else{focusMode=true;toast('Focus view on. Turn your phone sideways for a wider game.');}
+  }catch{focusMode=true;toast('Full screen is unavailable here. Focus view is on.');}
+  syncScreen();
+ }
+ for(const parent of [document.querySelector('header'),$('.hud')]){
+  const button=document.createElement('button');button.type='button';button.className='fullscreen-button';button.onclick=toggleScreen;parent.append(button);fullButtons.push(button);
+ }
+ const mobileHint=document.createElement('p');mobileHint.className='mobile-hint';mobileHint.textContent='Turn sideways for a wider view · Try Full screen';$('#game').append(mobileHint);
+ function fitScene(){
+  if(!$('#game').classList.contains('active'))return;
+  const height=window.visualViewport?.height||window.innerHeight;
+  const hud=$('.hud').getBoundingClientRect(),panel=$('.sentence-panel').getBoundingClientRect();
+  // Canvas keeps its true 16:9 bounds, so tapping a bubble stays accurate.
+  $('#game').style.setProperty('--scene-height',Math.max(100,height-hud.bottom-panel.height-12)+'px');
+ }
+ function syncView(){
+  const playing=$('#game').classList.contains('active');document.body.classList.toggle('playing-game',playing);
+  document.querySelectorAll('header nav [data-view]').forEach(b=>{if(b.dataset.view===activeView)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  requestAnimationFrame(fitScene);
+ }
+ new MutationObserver(syncView).observe($('#game'),{attributes:true,attributeFilter:['class']});
+ new MutationObserver(()=>requestAnimationFrame(fitScene)).observe($('.sentence-panel'),{childList:true,subtree:true});
+ if(window.ResizeObserver){const observer=new ResizeObserver(fitScene);observer.observe($('.hud'));observer.observe($('.sentence-panel'));}
+ window.addEventListener('resize',fitScene);window.visualViewport?.addEventListener('resize',fitScene);
+ document.addEventListener('fullscreenchange',syncScreen);document.addEventListener('webkitfullscreenchange',syncScreen);
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&focusMode){focusMode=false;syncScreen()}});
+ syncView();syncScreen();
+}
+setupMobileUI();
 renderHome();renderChests();renderInventory();webmcp();requestAnimationFrame(tick);
 document.addEventListener('pointerdown',syncMusic,{once:true});document.addEventListener('keydown',syncMusic,{once:true});document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMusic();else syncMusic()});
 try{profile=await api('profile');sync();if(!profile){try{$('#name').value=JSON.parse(localStorage.getItem('syntax-sprint-save'))?.name||''}catch{}$('#name-dialog').showModal()}else{for(const queued of resultQueue()){pendingResult=queued;await saveResult(queued)}}if(location.pathname==='/admin')view('admin')}catch(e){toast(e.message);$('#name-dialog').showModal()}
